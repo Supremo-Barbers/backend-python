@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+grades.db
+.env
+.vscode/
+.idea/
