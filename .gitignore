@@ -5,3 +5,6 @@ grades.db
 .env
 .vscode/
 .idea/
+grades.db
+grades.db-shm
+grades.db-wal

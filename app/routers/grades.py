@@ -1,6 +1,7 @@
 # app/routers/grades.py
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.core.immutable_types import CategoryRecord, ScoreRecord, StudentRecord
@@ -13,36 +14,38 @@ router = APIRouter(prefix="/api/courses", tags=["Grades"])
 def get_course_grades(course_id: UUID, db: Session = Depends(get_db)):
     # 1. Fetch raw relational rows (I/O Boundary)
     course_row = db.execute(
-        "SELECT id, code, title FROM courses WHERE id = :cid", {"cid": str(course_id)}
+        text("SELECT id, code, title FROM courses WHERE id = :cid"),
+        {"cid": str(course_id)}
     ).fetchone()
-    
+
     if not course_row:
         raise HTTPException(status_code=404, detail=f"Course with id {course_id} was not found.")
 
     student_rows = db.execute(
-        """
-        SELECT s.id, s.student_number, s.first_name, s.last_name 
+        text("""
+        SELECT s.id, s.student_number, s.first_name, s.last_name
         FROM students s
         JOIN enrollments e ON s.id = e.student_id
         WHERE e.course_id = :cid
-        """,
+        ORDER BY s.student_number
+        """),
         {"cid": str(course_id)}
     ).fetchall()
 
     category_rows = db.execute(
-        "SELECT id, name, weight FROM assessment_categories WHERE course_id = :cid",
+        text("SELECT id, name, weight FROM assessment_categories WHERE course_id = :cid ORDER BY name"),
         {"cid": str(course_id)}
     ).fetchall()
 
     score_rows = db.execute(
-        """
+        text("""
         SELECT sc.assessment_id, sc.student_id, sc.score_obtained, a.max_score, a.category_id
         FROM student_scores sc
         JOIN assessments a ON sc.assessment_id = a.id
         WHERE a.category_id IN (
             SELECT id FROM assessment_categories WHERE course_id = :cid
         )
-        """,
+        """),
         {"cid": str(course_id)}
     ).fetchall()
 
@@ -53,7 +56,7 @@ def get_course_grades(course_id: UUID, db: Session = Depends(get_db)):
         ) for r in student_rows
     )
     categories = tuple(
-        CategoryRecord(id=UUID(r[0]), name=r[1], weight=float(r[2])) 
+        CategoryRecord(id=UUID(r[0]), name=r[1], weight=float(r[2]))
         for r in category_rows
     )
     scores = tuple(
@@ -99,4 +102,3 @@ def get_course_grades(course_id: UUID, db: Session = Depends(get_db)):
             for rep in reports
         ],
     }
-
